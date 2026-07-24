@@ -370,6 +370,7 @@ body {
 }
 .reveal-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.2rem, 3vw, 1.8rem); }
 .reveal-artist { color: var(--spot); font-size: 1.2rem; font-weight: 500; margin-top: 6px; }
+.reveal-work { color: var(--lilas); font-size: 1.05rem; font-weight: 500; margin-top: 6px; }
 .reveal-cat { color: var(--brume); margin-top: 10px; font-size: 0.9rem; }
 
 .finders { list-style: none; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }

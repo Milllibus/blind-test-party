@@ -249,10 +249,11 @@ socket.on("game:generated", ({ total, categories }) => {
 });
 
 /* ---------- Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds, mode }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds, mode, hasWork }) => {
   show("screen-play");
   const modeTag = mode === "oneshot" ? " · ⚡ un seul essai" : "";
-  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}`;
+  const workTag = hasWork ? " · 🎬 film/série à deviner !" : "";
+  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}${workTag}`;
   $("foundTicker").innerHTML = "Écoutez bien… répondez sur vos téléphones !";
   $("btnSkip").classList.add("hidden");
   $("hintBox").classList.add("hidden");
@@ -271,7 +272,7 @@ socket.on("round:hint", ({ artwork, titleMask }) => {
 });
 
 socket.on("round:someoneFound", ({ name, what, foundCount }) => {
-  const label = what === "title" ? "le titre" : "l’artiste";
+  const label = what === "title" ? "le titre" : what === "work" ? "le film/la série" : "l’artiste";
   $("foundTicker").innerHTML = `🔥 <b>${escapeHtml(name)}</b> a trouvé ${label} ! (${foundCount} joueur·euse·s sur le coup)`;
   sfx.found();
 });
@@ -287,7 +288,7 @@ function renderFinders(finders) {
   } else {
     for (const f of finders) {
       const li = document.createElement("li");
-      const what = [f.title ? "titre" : null, f.artist ? "artiste" : null].filter(Boolean).join(" + ");
+      const what = [f.title ? "titre" : null, f.artist ? "artiste" : null, f.work ? "film" : null].filter(Boolean).join(" + ");
       li.innerHTML = `<b>${escapeHtml(f.name)}</b> · ${what} · +${f.points} pts`;
       ul.appendChild(li);
     }
@@ -302,7 +303,7 @@ function renderMiniBoard(leaderboard) {
 }
 
 /* Litiges : réponses refusées que l'hôte peut accepter quand même */
-function renderGrant(refused = []) {
+function renderGrant(refused = [], hasWork = false) {
   const panel = $("grantPanel");
   const ul = $("grantList");
   ul.innerHTML = "";
@@ -314,6 +315,7 @@ function renderGrant(refused = []) {
     const btns = [];
     if (!r.titleDone) btns.push(`<button class="btn-grant" data-id="${escapeHtml(r.id)}" data-what="title">✔ Accorder le titre</button>`);
     if (!r.artistDone) btns.push(`<button class="btn-grant" data-id="${escapeHtml(r.id)}" data-what="artist">✔ Accorder l’artiste</button>`);
+    if (hasWork && !r.workDone) btns.push(`<button class="btn-grant" data-id="${escapeHtml(r.id)}" data-what="work">✔ Accorder le film</button>`);
     li.innerHTML = `<b>${escapeHtml(r.name)}</b> a proposé ${r.guesses.map((g) => `« ${escapeHtml(g)} »`).join(", ")} ${btns.join(" ")}`;
     ul.appendChild(li);
   }
@@ -325,7 +327,7 @@ $("grantList").addEventListener("click", (e) => {
   b.remove();
 });
 
-socket.on("round:reveal", ({ title, artist, artwork, category, finders, leaderboard, isLast, refused }) => {
+socket.on("round:reveal", ({ title, artist, work, artwork, category, finders, leaderboard, isLast, refused }) => {
   audio.pause();
   cancelAnimationFrame(rafId);
   show("screen-reveal");
@@ -334,11 +336,13 @@ socket.on("round:reveal", ({ title, artist, artwork, category, finders, leaderbo
   $("revealArt").src = artwork || "";
   $("revealTitle").textContent = title;
   $("revealArtist").textContent = artist;
+  $("revealWork").textContent = work ? `🎬 ${work}` : "";
+  $("revealWork").classList.toggle("hidden", !work);
   $("revealCat").textContent = `Catégorie : ${category}`;
 
   renderFinders(finders);
   renderMiniBoard(leaderboard);
-  renderGrant(refused);
+  renderGrant(refused, !!work);
 
   $("btnNext").textContent = isLast ? "Voir le classement" : "Extrait suivant";
 });
@@ -405,7 +409,7 @@ function renderHistory(tracks = []) {
     d.innerHTML = `
       <img src="${escapeHtml(t.artwork || "")}" alt="" loading="lazy" />
       <b>${escapeHtml(t.title)}</b>
-      <span>${escapeHtml(t.artist)}</span>`;
+      <span>${escapeHtml(t.artist)}</span>${t.work ? `<span>🎬 ${escapeHtml(t.work)}</span>` : ""}`;
     grid.appendChild(d);
   }
 }

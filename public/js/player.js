@@ -11,6 +11,7 @@ let myName = "";
 let myScore = 0;
 let lastGain = 0;
 let roundMode = "libre";
+let roundHasWork = false;
 
 /* Clé persistante : permet de retrouver sa place après un rechargement */
 function makeKey() {
@@ -39,11 +40,18 @@ function setScore(score) {
   $("myScoreChip").textContent = `${score} pts`;
 }
 
-function setPills(titleDone, artistDone) {
+function setPills(titleDone, artistDone, workDone) {
   $("pillTitle").classList.toggle("done", !!titleDone);
   $("pillTitle").textContent = titleDone ? "Titre ✓" : "Titre ?";
   $("pillArtist").classList.toggle("done", !!artistDone);
   $("pillArtist").textContent = artistDone ? "Artiste ✓" : "Artiste ?";
+  $("pillWork").classList.toggle("hidden", !roundHasWork);
+  $("pillWork").classList.toggle("done", !!workDone);
+  $("pillWork").textContent = workDone ? "Film/Série ✓" : "Film/Série ?";
+}
+
+function allFound(res) {
+  return res.titleDone && res.artistDone && (!roundHasWork || res.workDone);
 }
 
 function lockAnswers(msg) {
@@ -144,9 +152,10 @@ $("btnCat").addEventListener("click", sendCategory);
 $("catInput").addEventListener("keydown", (e) => e.key === "Enter" && sendCategory());
 
 /* ---------- 3. Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, mode }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, mode, hasWork }) => {
   lastGain = 0;
   roundMode = mode || "libre";
+  roundHasWork = !!hasWork;
   show("p-round");
   if (previewUrl) {
     remoteAudio.src = previewUrl;
@@ -154,12 +163,13 @@ socket.on("round:start", ({ index, total, category, previewUrl, mode }) => {
     remoteAudio.play().catch(() => {});
   }
   $("pRoundInfo").textContent = `Extrait ${index + 1} / ${total} · ${category}`;
-  setPills(false, false);
+  setPills(false, false, false);
   const fb = $("answerFeedback");
   fb.className = "answer-feedback";
+  const targets = roundHasWork ? "titre, artiste ou <b>film/série</b>" : "le titre <b>ou</b> l’artiste";
   fb.innerHTML = roundMode === "oneshot"
-    ? "⚡ <b>UN SEUL essai</b> : titre ou artiste, choisis bien ! (points ×2)"
-    : "Tape le titre <b>ou</b> l’artiste. Les fautes sont pardonnées !";
+    ? `⚡ <b>UN SEUL essai</b> (${roundHasWork ? "titre, artiste ou film/série" : "titre ou artiste"}), choisis bien ! (points ×2)`
+    : `Tape ${targets}. Les fautes sont pardonnées !`;
   $("answerInput").value = "";
   $("answerInput").disabled = false;
   $("btnAnswer").disabled = false;
@@ -167,10 +177,10 @@ socket.on("round:start", ({ index, total, category, previewUrl, mode }) => {
 });
 
 /* État renvoyé après une reconnexion en pleine manche */
-socket.on("answer:state", ({ titleDone, artistDone, locked, score }) => {
+socket.on("answer:state", ({ titleDone, artistDone, workDone, locked, score }) => {
   setScore(score);
-  setPills(titleDone, artistDone);
-  if (locked || (titleDone && artistDone)) {
+  setPills(titleDone, artistDone, workDone);
+  if (locked || allFound({ titleDone, artistDone, workDone })) {
     lockAnswers("Réponses enregistrées — attends la fin du chrono…");
   }
 });
@@ -185,7 +195,7 @@ function sendAnswer() {
     if (!res) return;
     const fb = $("answerFeedback");
     setScore(res.score);
-    setPills(res.titleDone, res.artistDone);
+    setPills(res.titleDone, res.artistDone, res.workDone);
 
     const streakTag = res.streak >= 1 ? ` · 🔥 bonus série !` : "";
     if (res.found === "title") {
@@ -196,6 +206,10 @@ function sendAnswer() {
       lastGain += res.gained;
       fb.className = "answer-feedback good";
       fb.textContent = `🎤 Artiste trouvé ! +${res.gained} pts${streakTag}`;
+    } else if (res.found === "work") {
+      lastGain += res.gained;
+      fb.className = "answer-feedback good";
+      fb.textContent = `🎬 Film/Série trouvé ! +${res.gained} pts${streakTag}`;
     } else if (res.near) {
       fb.className = "answer-feedback near";
       fb.textContent = `🔥 « ${text} » … tu chauffes, c’est tout proche !`;
@@ -208,7 +222,7 @@ function sendAnswer() {
       // L'essai est consommé, trouvé ou pas
       $("answerInput").disabled = true;
       $("btnAnswer").disabled = true;
-    } else if (res.titleDone && res.artistDone) {
+    } else if (allFound(res)) {
       lockAnswers("💯 Carton plein ! Attends la fin du chrono…");
     }
   });
@@ -224,11 +238,11 @@ socket.on("score:sync", ({ score, gained, what }) => {
 });
 
 /* ---------- 4. Révélation ---------- */
-socket.on("round:reveal", ({ title, artist }) => {
+socket.on("round:reveal", ({ title, artist, work }) => {
   remoteAudio.pause();
   show("p-reveal");
   $("pRevealTitle").textContent = title;
-  $("pRevealArtist").textContent = artist;
+  $("pRevealArtist").textContent = artist + (work ? ` · 🎬 ${work}` : "");
   $("myGain").textContent = lastGain > 0 ? `+${lastGain} pts pour toi 🎉` : "0 pt cette fois… 😬";
 });
 

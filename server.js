@@ -31,6 +31,7 @@ const CONFIG = {
   ROUND_SECONDS: 25,        // temps de réponse par extrait
   POINTS_TITLE: 100,
   POINTS_ARTIST: 50,
+  POINTS_WORK: 75,          // film / série / Disney (si l'extrait vient d'une B.O.)
   SPEED_BONUS_MAX: 50,
   ONESHOT_MULT: 2,          // multiplicateur du mode "un seul essai"
   STREAK_STEP: 0.15,        // +15 % de points par manche de série…
@@ -236,6 +237,7 @@ function isNearOne(guessRaw, targetRaw) {
 function isNear(guessRaw, track, entry) {
   if (!entry.title && isNearOne(guessRaw, track.title)) return true;
   if (!entry.artist && splitArtists(track.artist).some((a) => isNearOne(guessRaw, a))) return true;
+  if (!entry.work && track.work && isNearOne(guessRaw, track.work)) return true;
   return false;
 }
 
@@ -248,6 +250,30 @@ function titleMask(title) {
     .map((w) => (w.length > 1 ? w[0].toUpperCase() + " ·".repeat(w.length - 1).trim() : w.toUpperCase()))
     .map((w) => w.replace(/ /g, ""))
     .join("   ");
+}
+
+/* L'album d'une bande originale contient le nom du film / de la série :
+   "Vaiana (Bande Originale Française du Film)" → "Vaiana".
+   Retourne null si l'album ne ressemble pas à une B.O. (compilations…). */
+function soundtrackWork(collectionName) {
+  const raw = String(collectionName || "");
+  // Singles : « Zoo (De "Zootopie 2") » / « (From "Lilo & Stitch") »
+  const single = raw.match(/\((?:de|from|tiré de|extrait de)\s+["«“]\s*([^)"»”]+?)\s*["»”]\s*\)/i);
+  if (single && single[1].trim().length >= 2) return single[1].trim();
+  if (!/soundtrack|score\)|bande originale|b\.o\.|motion picture|music from|musique (du film|de la serie|de la série)|cast recording|original (series|television)|movie|du film|de la série/i.test(raw)) {
+    return null;
+  }
+  const name = raw
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .replace(/\b(the\s+)?(original\s+|complete\s+)?(motion\s+picture\s+|television\s+|netflix\s+|movie\s+|film\s+)?(soundtrack|score)\b.*$/i, " ")
+    .replace(/\b(music|songs?|themes?)\s+from\b.*$/i, " ")
+    .replace(/\b(bande\s+originale|b\.o\.)\b.*$/i, " ")
+    .replace(/\bmusique\s+(du|de\s+la|de)\b.*$/i, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/[:–—,-]+$/, "")
+    .trim();
+  return name.length >= 2 ? name : null;
 }
 
 /* ============================================================
@@ -285,9 +311,16 @@ function pickTracks(results, n, category) {
     }
     seenArtists.add(artistKey);
     seenTitles.add(titleKey);
+    // Film/série à deviner en plus, sauf s'il se confond avec le titre ou l'artiste
+    let work = soundtrackWork(t.collectionName);
+    if (work && (fuzzyMatch(work, t.trackName) || fuzzyMatch(t.trackName, work)
+      || fuzzyMatch(work, t.artistName) || fuzzyMatch(t.artistName, work))) {
+      work = null;
+    }
     picked.push({
       title: t.trackName,
       artist: t.artistName,
+      work,
       previewUrl: t.previewUrl,
       artwork: (t.artworkUrl100 || "").replace("100x100", "400x400"),
       category,
@@ -326,6 +359,7 @@ function startRound(game) {
     endsAt: game.round.endsAt,
     seconds: game.opts.roundSeconds,
     mode: game.opts.answerMode,
+    hasWork: !!track.work,
   };
   // L'écran hôte de CETTE room joue le son
   io.to(game.hostId).emit("round:start", { ...base, previewUrl: track.previewUrl });
@@ -346,7 +380,7 @@ function sendHint(game) {
 function buildFinders(game) {
   return [...game.round.found.entries()].map(([key, f]) => {
     const p = game.players.get(key);
-    return { name: p ? p.name : "?", title: f.title, artist: f.artist, points: f.points };
+    return { name: p ? p.name : "?", title: f.title, artist: f.artist, work: f.work, points: f.points };
   }).sort((a, b) => b.points - a.points);
 }
 
@@ -366,19 +400,21 @@ function endRound(game) {
     }
   }
 
+  const track = game.tracks[game.current];
+
   // Litiges : réponses refusées de joueurs à qui il manque encore des points
   const refused = [...game.round.refused.entries()].map(([key, guesses]) => {
     const p = game.players.get(key);
     const f = game.round.found.get(key) || {};
-    return { id: key, name: p ? p.name : "?", guesses, titleDone: !!f.title, artistDone: !!f.artist };
-  }).filter((r) => !(r.titleDone && r.artistDone));
+    return { id: key, name: p ? p.name : "?", guesses, titleDone: !!f.title, artistDone: !!f.artist, workDone: !!f.work };
+  }).filter((r) => !(r.titleDone && r.artistDone && (r.workDone || !track.work)));
 
-  const track = game.tracks[game.current];
   io.to(game.code).emit("round:reveal", {
     index: game.current,
     total: game.tracks.length,
     title: track.title,
     artist: track.artist,
+    work: track.work,
     artwork: track.artwork,
     category: track.category,
     finders: buildFinders(game),
@@ -390,7 +426,7 @@ function endRound(game) {
 
 function podiumTracks(game) {
   return game.tracks.slice(0, game.current + 1).map((t) => ({
-    title: t.title, artist: t.artist, artwork: t.artwork, category: t.category,
+    title: t.title, artist: t.artist, work: t.work, artwork: t.artwork, category: t.category,
   }));
 }
 
@@ -440,12 +476,13 @@ function sendSnapshot(game, socket, p) {
     const payload = {
       index: game.current, total: game.tracks.length, category: track.category,
       endsAt: game.round.endsAt, seconds: game.opts.roundSeconds, mode: game.opts.answerMode,
+      hasWork: !!track.work,
     };
     if (game.remoteAudio) payload.previewUrl = track.previewUrl;
     socket.emit("round:start", payload);
     const f = game.round.found.get(p.key) || {};
     socket.emit("answer:state", {
-      titleDone: !!f.title, artistDone: !!f.artist,
+      titleDone: !!f.title, artistDone: !!f.artist, workDone: !!f.work,
       locked: game.opts.answerMode === "oneshot" && game.round.attempts.has(p.key),
       score: p.score,
     });
@@ -453,7 +490,7 @@ function sendSnapshot(game, socket, p) {
     const track = game.tracks[game.current];
     socket.emit("round:reveal", {
       index: game.current, total: game.tracks.length,
-      title: track.title, artist: track.artist, artwork: track.artwork, category: track.category,
+      title: track.title, artist: track.artist, work: track.work, artwork: track.artwork, category: track.category,
       finders: buildFinders(game), leaderboard: leaderboard(game),
       isLast: game.current === game.tracks.length - 1, refused: [],
     });
@@ -499,6 +536,7 @@ io.on("connection", (socket) => {
         endsAt: game.round.endsAt,
         seconds: game.opts.roundSeconds,
         mode: game.opts.answerMode,
+        hasWork: !!track.work,
         previewUrl: track.previewUrl,
       });
       // L'indice était déjà passé ? On le renvoie.
@@ -573,11 +611,14 @@ io.on("connection", (socket) => {
     const game = gameOf(socket);
     if (!game || socket.id !== game.hostId || game.state !== "REVEAL" || !game.round) return;
     const p = game.players.get(String(id || ""));
-    if (!p || !["title", "artist"].includes(what)) return;
-    const entry = game.round.found.get(p.key) || { title: false, artist: false, points: 0 };
+    if (!p || !["title", "artist", "work"].includes(what)) return;
+    if (what === "work" && !game.tracks[game.current].work) return;
+    const entry = game.round.found.get(p.key) || { title: false, artist: false, work: false, points: 0 };
     if (entry[what]) return;
     entry[what] = true;
-    const gained = what === "title" ? CONFIG.POINTS_TITLE : CONFIG.POINTS_ARTIST;
+    const gained = what === "title" ? CONFIG.POINTS_TITLE
+      : what === "artist" ? CONFIG.POINTS_ARTIST
+      : CONFIG.POINTS_WORK;
     entry.points += gained;
     p.score += gained;
     game.round.found.set(p.key, entry);
@@ -686,12 +727,12 @@ io.on("connection", (socket) => {
     const round = game.round;
     const track = game.tracks[game.current];
     const oneshot = game.opts.answerMode === "oneshot";
-    const already = round.found.get(p.key) || { title: false, artist: false, points: 0 };
+    const already = round.found.get(p.key) || { title: false, artist: false, work: false, points: 0 };
 
     if (oneshot && round.attempts.has(p.key)) {
       return ack && ack({
         found: null, gained: 0, locked: true,
-        titleDone: already.title, artistDone: already.artist, score: p.score,
+        titleDone: already.title, artistDone: already.artist, workDone: already.work, score: p.score,
       });
     }
     if (oneshot) round.attempts.set(p.key, text);
@@ -712,6 +753,10 @@ io.on("connection", (socket) => {
       gained = Math.round((CONFIG.POINTS_ARTIST + (CONFIG.SPEED_BONUS_MAX / 2) * ratio) * mult);
       already.artist = true;
       found = "artist";
+    } else if (!already.work && track.work && fuzzyMatch(text, track.work)) {
+      gained = Math.round((CONFIG.POINTS_WORK + CONFIG.SPEED_BONUS_MAX * 0.75 * ratio) * mult);
+      already.work = true;
+      found = "work";
     }
 
     let near = false;
@@ -735,6 +780,7 @@ io.on("connection", (socket) => {
       streak: p.streak || 0,
       titleDone: already.title,
       artistDone: already.artist,
+      workDone: already.work,
       score: p.score,
     });
 
@@ -742,7 +788,7 @@ io.on("connection", (socket) => {
     const everyoneDone = connected.length > 0 && connected.every((x) => {
       if (oneshot) return round.attempts.has(x.key);
       const f = round.found.get(x.key);
-      return f && f.title && f.artist;
+      return f && f.title && f.artist && (f.work || !track.work);
     });
     if (everyoneDone) endRound(game);
   });
