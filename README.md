@@ -36,11 +36,22 @@ Le QR code s'adapte tout seul : il pointe vers l'adresse du site (`location.orig
 | Titre | 100 + bonus vitesse (jusqu'à +50) |
 | Artiste | 50 + bonus vitesse (jusqu'à +25) |
 
-Réponses **tolérantes aux fautes** (normalisation accents/ponctuation/« feat. » + distance de Levenshtein). Manche écourtée si tout le monde a tout trouvé.
+- Réponses **tolérantes aux fautes** (normalisation accents/ponctuation/« feat. » + distance de Levenshtein). Manche écourtée si tout le monde a tout trouvé.
+- **Artistes multiples** : sur « David Guetta & Sia », citer un seul des deux suffit.
+- **Bonus de série** : +15 % de points par manche consécutive avec au moins une trouvaille (plafonné à +60 %).
+- **Presque !** : une réponse proche affiche « tu chauffes » sur le téléphone.
+- **Litiges** : sur l'écran de révélation, l'hôte peut accorder un point refusé par le matching.
 
-## Réglages (`CONFIG` dans server.js)
+## Réglages depuis le lobby (par partie)
 
-`TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS` (25), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min).
+- **Extraits par catégorie** (2 à 5) et **durée par extrait** (15 à 45 s).
+- **Mode réponses** : essais illimités, ou **un seul essai** (points ×2).
+- **Mode playlist** : chacun sa catégorie, ou **thèmes imposés** par l'écran (séparés par des virgules).
+- Indice automatique à mi-manche sur le grand écran (pochette floutée + initiales du titre).
+- Sons d'ambiance sur l'écran (désactivables via 🔊), podium animé avec confettis, historique de la playlist en fin de partie.
+- Les téléphones **se reconnectent tout seuls** (page rechargée, réseau qui saute) sans perdre leur score.
+
+Valeurs par défaut dans `CONFIG` (server.js) : `TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS` (25), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min).
 
 ## Détails techniques
 

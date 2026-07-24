@@ -12,7 +12,10 @@
 
   <header class="stage-bar">
     <span class="brand">BLIND<em>TEST</em></span>
-    <span class="room-chip" id="roomChip">ROOM ····</span>
+    <div class="bar-right">
+      <button class="sound-btn" id="btnSound" title="Activer / couper les sons">🔊</button>
+      <span class="room-chip" id="roomChip">ROOM ····</span>
+    </div>
   </header>
 
   <!-- ÉCRAN 1 : LOBBY -->
@@ -28,6 +31,39 @@
         <ul class="player-list" id="playerList">
           <li class="player-empty">Personne pour l’instant… scannez le QR code !</li>
         </ul>
+        <div class="settings">
+          <label>Extraits / catégorie
+            <select id="optTracks">
+              <option value="2">2</option>
+              <option value="3" selected>3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <label>Durée par extrait
+            <select id="optSeconds">
+              <option value="15">15 s</option>
+              <option value="25" selected>25 s</option>
+              <option value="35">35 s</option>
+              <option value="45">45 s</option>
+            </select>
+          </label>
+          <label>Réponses
+            <select id="optAnswerMode">
+              <option value="libre" selected>Essais illimités</option>
+              <option value="oneshot">Un seul essai (points ×2)</option>
+            </select>
+          </label>
+          <label>Playlist
+            <select id="optPlaylistMode">
+              <option value="players" selected>Chacun sa catégorie</option>
+              <option value="host">Thèmes imposés par l’écran</option>
+            </select>
+          </label>
+        </div>
+        <input class="field themes-field hidden" id="optThemes" maxlength="200"
+               placeholder="Thèmes séparés par des virgules (ex : Années 80, Disney, Rap FR)" />
+        <p class="form-error" id="lobbyError"></p>
         <button class="btn btn-spot" id="btnStart" disabled>Lancer la partie</button>
         <label class="toggle">
           <input type="checkbox" id="chkRemoteAudio" />
@@ -64,6 +100,13 @@
       <div class="timer-digits" id="timerDigits">25</div>
     </div>
     <p class="found-ticker" id="foundTicker">Écoutez bien… répondez sur vos téléphones !</p>
+    <div class="hint-box hidden" id="hintBox">
+      <img class="hint-art" id="hintArt" alt="" />
+      <div class="hint-meta">
+        <p class="eyebrow">Indice</p>
+        <p class="hint-mask" id="hintMask"></p>
+      </div>
+    </div>
     <div class="equalizer" id="equalizer" aria-hidden="true"></div>
     <button class="btn btn-ghost btn-skip hidden" id="btnSkip">Extrait illisible — passer</button>
   </section>
@@ -80,6 +123,10 @@
       </div>
     </div>
     <ul class="finders" id="finders"></ul>
+    <div class="grant-panel hidden" id="grantPanel">
+      <p class="eyebrow center">Litiges — l’écran peut accorder les points</p>
+      <ul class="grant-list" id="grantList"></ul>
+    </div>
     <div class="mini-board" id="miniBoard"></div>
     <button class="btn btn-spot" id="btnNext">Extrait suivant</button>
   </section>
@@ -89,9 +136,14 @@
     <p class="eyebrow center">Fin du set</p>
     <h1 class="display">Classement</h1>
     <ol class="podium" id="podium"></ol>
+    <div class="history hidden" id="history">
+      <p class="eyebrow center">La playlist de la soirée</p>
+      <div class="history-grid" id="historyGrid"></div>
+    </div>
     <button class="btn btn-ghost" id="btnReplay">Rejouer</button>
   </section>
 
+  <canvas id="confetti"></canvas>
   <audio id="audio" preload="auto"></audio>
 
   <script src="/socket.io/socket.io.js"></script>
