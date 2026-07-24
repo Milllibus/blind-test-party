@@ -155,6 +155,21 @@ function levenshtein(a, b) {
   return prev[n];
 }
 
+/* "David Guetta & Sia" / "Orelsan feat. Stromae" → chaque artiste
+   accepté seul. Le nom complet reste candidat (Simon & Garfunkel). */
+function splitArtists(artistRaw) {
+  const raw = String(artistRaw || "");
+  const parts = raw
+    .split(/\s*(?:,|&|\/|\+|\bfeat\b\.?|\bft\b\.?|\bfeaturing\b|\bvs\b\.?|\bx\b|\band\b|\bet\b)\s*/gi)
+    .map((s) => s.trim())
+    .filter((s) => s.length >= 2);
+  return [...new Set([raw, ...parts])];
+}
+
+function matchArtist(guessRaw, artistRaw) {
+  return splitArtists(artistRaw).some((a) => fuzzyMatch(guessRaw, a));
+}
+
 function fuzzyMatch(guessRaw, targetRaw) {
   const guess = normalize(guessRaw);
   const target = normalize(targetRaw);
@@ -460,7 +475,7 @@ io.on("connection", (socket) => {
       gained = CONFIG.POINTS_TITLE + Math.round(CONFIG.SPEED_BONUS_MAX * ratio);
       already.title = true;
       found = "title";
-    } else if (!already.artist && fuzzyMatch(text, track.artist)) {
+    } else if (!already.artist && matchArtist(text, track.artist)) {
       gained = CONFIG.POINTS_ARTIST + Math.round((CONFIG.SPEED_BONUS_MAX / 2) * ratio);
       already.artist = true;
       found = "artist";
