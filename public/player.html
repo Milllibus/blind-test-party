@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Blind Test — Manette</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="player">
+
+  <header class="stage-bar">
+    <span class="brand">BLIND<em>TEST</em></span>
+    <span class="room-chip" id="myScoreChip">0 pts</span>
+  </header>
+
+  <!-- ÉTAPE 1 : CODE + PSEUDO -->
+  <section class="screen active" id="p-join">
+    <p class="eyebrow">Bienvenue sur scène</p>
+    <h1 class="display sm">Rejoindre une partie</h1>
+    <input class="field code-field" id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" />
+    <div class="field-row">
+      <input class="field" id="nameInput" maxlength="16" placeholder="Ton pseudo" autocomplete="off" />
+      <button class="btn btn-spot" id="btnJoin">Go</button>
+    </div>
+    <p class="form-error" id="joinError"></p>
+    <a class="host-link" href="/host">→ Créer une partie sur cet écran (PC / TV)</a>
+  </section>
+
+  <!-- ÉTAPE 2 : SALLE D'ATTENTE -->
+  <section class="screen" id="p-wait">
+    <div class="vinyl vinyl-spin small"><div class="vinyl-label">♪</div></div>
+    <h1 class="display sm">Tu es dans la place, <span id="myName">…</span> !</h1>
+    <p class="sub">Regarde le grand écran. La partie démarre bientôt.</p>
+  </section>
+
+  <!-- ÉTAPE 3 : CATÉGORIE -->
+  <section class="screen" id="p-category">
+    <p class="eyebrow">À toi de jouer</p>
+    <h1 class="display sm">Choisis une catégorie</h1>
+    <p class="sub">Un style, un artiste, une époque, un jeu vidéo…</p>
+    <div class="chips">
+      <button class="chip" data-cat="Rap FR">Rap FR</button>
+      <button class="chip" data-cat="Années 80">Années 80</button>
+      <button class="chip" data-cat="Disney">Disney</button>
+      <button class="chip" data-cat="Zelda">Zelda</button>
+      <button class="chip" data-cat="Rock 90s">Rock 90s</button>
+      <button class="chip" data-cat="Daft Punk">Daft Punk</button>
+    </div>
+    <div class="field-row">
+      <input class="field" id="catInput" maxlength="40" placeholder="Ta catégorie…" autocomplete="off" />
+      <button class="btn btn-spot" id="btnCat">Valider</button>
+    </div>
+    <p class="form-error" id="catError"></p>
+  </section>
+
+  <!-- ÉTAPE 3bis : CATÉGORIE VALIDÉE -->
+  <section class="screen" id="p-category-ok">
+    <p class="eyebrow">Catégorie enregistrée</p>
+    <h1 class="display sm" id="myCat">—</h1>
+    <p class="sub">On attend les autres… puis la playlist se prépare.</p>
+  </section>
+
+  <!-- ÉTAPE 4 : MANCHE EN COURS -->
+  <section class="screen" id="p-round">
+    <p class="eyebrow" id="pRoundInfo">Extrait 1 / 12</p>
+    <div class="answer-status">
+      <span class="status-pill" id="pillTitle">Titre&nbsp;?</span>
+      <span class="status-pill" id="pillArtist">Artiste&nbsp;?</span>
+    </div>
+    <div class="field-row sticky-bottom">
+      <input class="field" id="answerInput" placeholder="Titre ou artiste…" autocomplete="off" enterkeyhint="send" />
+      <button class="btn btn-spot" id="btnAnswer">Envoyer</button>
+    </div>
+    <p class="answer-feedback" id="answerFeedback">Tape le titre <b>ou</b> l’artiste. Les fautes sont pardonnées&nbsp;!</p>
+  </section>
+
+  <!-- ÉTAPE 5 : RÉVÉLATION -->
+  <section class="screen" id="p-reveal">
+    <p class="eyebrow">Réponse</p>
+    <h1 class="display sm" id="pRevealTitle">—</h1>
+    <p class="sub" id="pRevealArtist">—</p>
+    <p class="my-gain" id="myGain"></p>
+    <p class="sub soft">Le prochain extrait arrive…</p>
+  </section>
+
+  <!-- ÉTAPE 6 : PODIUM -->
+  <section class="screen" id="p-podium">
+    <p class="eyebrow">Fin de partie</p>
+    <h1 class="display sm" id="myRank">—</h1>
+    <p class="sub" id="myFinalScore"></p>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/player.js"></script>
+</body>
+</html>

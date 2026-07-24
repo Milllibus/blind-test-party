@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blind Test Party — Écran</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body class="host">
+
+  <header class="stage-bar">
+    <span class="brand">BLIND<em>TEST</em></span>
+    <span class="room-chip" id="roomChip">ROOM ····</span>
+  </header>
+
+  <!-- ÉCRAN 1 : LOBBY -->
+  <section class="screen active" id="screen-lobby">
+    <div class="lobby-grid">
+      <div class="lobby-join">
+        <p class="eyebrow">Pour jouer, scannez</p>
+        <div class="qr-frame"><div id="qrcode"></div></div>
+        <p class="join-url" id="joinUrl">http://…</p>
+      </div>
+      <div class="lobby-players">
+        <p class="eyebrow">Sur scène <span id="playerCount">(0)</span></p>
+        <ul class="player-list" id="playerList">
+          <li class="player-empty">Personne pour l’instant… scannez le QR code !</li>
+        </ul>
+        <button class="btn btn-spot" id="btnStart" disabled>Lancer la partie</button>
+        <label class="toggle">
+          <input type="checkbox" id="chkRemoteAudio" />
+          Jouer aussi la musique sur les téléphones (joueurs à distance)
+        </label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ÉCRAN 2 : CATÉGORIES -->
+  <section class="screen" id="screen-categories">
+    <p class="eyebrow center">Manche de préparation</p>
+    <h1 class="display">Chacun choisit<br>sa catégorie</h1>
+    <p class="sub">Regardez vos téléphones : tapez un thème, un artiste, une époque…</p>
+    <ul class="cat-progress" id="catProgress"></ul>
+  </section>
+
+  <!-- ÉCRAN 3 : GÉNÉRATION -->
+  <section class="screen" id="screen-generating">
+    <div class="vinyl vinyl-spin small"><div class="vinyl-label"></div></div>
+    <h1 class="display">Préparation<br>de la playlist…</h1>
+    <ul class="gen-cats" id="genCats"></ul>
+  </section>
+
+  <!-- ÉCRAN 4 : JEU -->
+  <section class="screen" id="screen-play">
+    <p class="eyebrow center" id="roundInfo">Extrait 1 / 12 · Catégorie : —</p>
+    <div class="turntable">
+      <svg class="timer-ring" viewBox="0 0 260 260">
+        <circle class="ring-bg" cx="130" cy="130" r="120" />
+        <circle class="ring-fg" id="ringFg" cx="130" cy="130" r="120" />
+      </svg>
+      <div class="vinyl vinyl-spin" id="vinyl"><div class="vinyl-label">?</div></div>
+      <div class="timer-digits" id="timerDigits">25</div>
+    </div>
+    <p class="found-ticker" id="foundTicker">Écoutez bien… répondez sur vos téléphones !</p>
+    <div class="equalizer" id="equalizer" aria-hidden="true"></div>
+    <button class="btn btn-ghost btn-skip hidden" id="btnSkip">Extrait illisible — passer</button>
+  </section>
+
+  <!-- ÉCRAN 5 : RÉVÉLATION -->
+  <section class="screen" id="screen-reveal">
+    <p class="eyebrow center">C’était…</p>
+    <div class="reveal-card">
+      <img class="reveal-art" id="revealArt" alt="" />
+      <div class="reveal-meta">
+        <h2 class="reveal-title" id="revealTitle">—</h2>
+        <p class="reveal-artist" id="revealArtist">—</p>
+        <p class="reveal-cat" id="revealCat">—</p>
+      </div>
+    </div>
+    <ul class="finders" id="finders"></ul>
+    <div class="mini-board" id="miniBoard"></div>
+    <button class="btn btn-spot" id="btnNext">Extrait suivant</button>
+  </section>
+
+  <!-- ÉCRAN 6 : PODIUM -->
+  <section class="screen" id="screen-podium">
+    <p class="eyebrow center">Fin du set</p>
+    <h1 class="display">Classement</h1>
+    <ol class="podium" id="podium"></ol>
+    <button class="btn btn-ghost" id="btnReplay">Rejouer</button>
+  </section>
+
+  <audio id="audio" preload="auto"></audio>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="/js/host.js"></script>
+</body>
+</html>
