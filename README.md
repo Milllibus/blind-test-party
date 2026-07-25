@@ -51,7 +51,7 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 - **Difficulté** : 😌 facile (les gros tubes), 🎚️ moyen (points ×1,25) ou 🔥 difficile (pépites méconnues, points ×1,5). iTunes ne publie pas les nombres d'écoutes mais classe ses résultats par popularité : le niveau détermine si les extraits sont piochés en haut, au milieu ou au fond de ce classement. Les reprises karaoké/tribute sont filtrées.
 - **Mode réponses** : essais illimités, ou **un seul essai** (points ×2).
 - **Mode playlist** : chacun sa catégorie, ou **thèmes imposés** par l'écran (séparés par des virgules).
-- Indice automatique à mi-manche sur le grand écran (pochette floutée + initiales du titre).
+- Indice automatique à mi-manche sur le grand écran (pochette floutée + initiales du titre) — niveaux moyen et difficile uniquement, pas d'indice en facile.
 - Sons d'ambiance sur l'écran (désactivables via 🔊), podium animé avec confettis, historique de la playlist en fin de partie.
 - Les téléphones **se reconnectent tout seuls** (page rechargée, réseau qui saute) sans perdre leur score.
 

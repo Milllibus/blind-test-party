@@ -408,8 +408,10 @@ function startRound(game) {
   emitToPlayers(game, "round:start", game.remoteAudio ? { ...base, previewUrl: track.previewUrl } : base);
 }
 
-/* Indice de mi-manche (grand écran uniquement) : pochette floutée + initiales */
+/* Indice de mi-manche (grand écran uniquement) : pochette floutée + initiales.
+   Pas d'indice en facile : les tubes se trouvent déjà tout seuls. */
 function sendHint(game) {
+  if (game.opts.difficulty === "facile") return;
   if (game.state !== "PLAYING" || !game.round || game.round.revealed) return;
   const track = game.tracks[game.current];
   io.to(game.hostId).emit("round:hint", {
