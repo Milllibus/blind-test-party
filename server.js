@@ -28,7 +28,8 @@ const PORT = process.env.PORT || 3000;
 /* ---------- Réglages du jeu (valeurs par défaut d'une room) ---------- */
 const CONFIG = {
   TRACKS_PER_CATEGORY: 3,   // musiques par catégorie
-  ROUND_SECONDS: 25,        // temps de réponse par extrait
+  ROUND_SECONDS_MIN: 30,    // durée d'une manche : tirée au sort…
+  ROUND_SECONDS_MAX: 45,    // …entre ces deux bornes (secondes)
   POINTS_TITLE: 100,
   POINTS_ARTIST: 50,
   POINTS_WORK: 75,          // film / série / Disney (si l'extrait vient d'une B.O.)
@@ -87,7 +88,6 @@ function makeCode() {
 function defaultOpts() {
   return {
     tracksPerCat: CONFIG.TRACKS_PER_CATEGORY,
-    roundSeconds: CONFIG.ROUND_SECONDS,
     answerMode: "libre",      // "libre" | "oneshot" (un seul essai, points ×2)
     difficulty: "facile",     // "facile" | "moyen" | "difficile" (durée d'écoute)
     playlistMode: "players",  // "players" (chacun sa catégorie) | "host" (thèmes imposés)
@@ -373,8 +373,13 @@ function startRound(game) {
 
   const track = game.tracks[game.current];
   game.state = "PLAYING";
-  const durationMs = game.opts.roundSeconds * 1000;
+  // Durée tirée au sort à chaque extrait (les previews iTunes durent 30 s :
+  // si le chrono va au-delà, on continue de répondre après la musique)
+  const seconds = CONFIG.ROUND_SECONDS_MIN
+    + Math.floor(Math.random() * (CONFIG.ROUND_SECONDS_MAX - CONFIG.ROUND_SECONDS_MIN + 1));
+  const durationMs = seconds * 1000;
   game.round = {
+    seconds,
     startsAt: Date.now(),
     endsAt: Date.now() + durationMs,
     found: new Map(),      // playerKey -> { title, artist, points }
@@ -392,7 +397,7 @@ function startRound(game) {
     category: track.category,
     endsAt: game.round.endsAt,
     now: Date.now(), // horloge serveur : le client corrige son décalage
-    seconds: game.opts.roundSeconds,
+    seconds: game.round.seconds,
     mode: game.opts.answerMode,
     difficulty: game.opts.difficulty,
     hasWork: !!track.work,
@@ -511,7 +516,7 @@ function sendSnapshot(game, socket, p) {
     const track = game.tracks[game.current];
     const payload = {
       index: game.current, total: game.tracks.length, category: track.category,
-      endsAt: game.round.endsAt, now: Date.now(), seconds: game.opts.roundSeconds,
+      endsAt: game.round.endsAt, now: Date.now(), seconds: game.round.seconds,
       mode: game.opts.answerMode, difficulty: game.opts.difficulty, hasWork: !!track.work,
     };
     if (game.remoteAudio) payload.previewUrl = track.previewUrl;
@@ -571,14 +576,14 @@ io.on("connection", (socket) => {
         category: track.category,
         endsAt: game.round.endsAt,
         now: Date.now(),
-        seconds: game.opts.roundSeconds,
+        seconds: game.round.seconds,
         mode: game.opts.answerMode,
         difficulty: game.opts.difficulty,
         hasWork: !!track.work,
         previewUrl: track.previewUrl,
       });
       // L'indice était déjà passé ? On le renvoie.
-      if (Date.now() >= game.round.startsAt + (game.opts.roundSeconds * 1000) / 2) sendHint(game);
+      if (Date.now() >= game.round.startsAt + (game.round.endsAt - game.round.startsAt) / 2) sendHint(game);
     } else if (game.state === "REVEAL") {
       game.round.revealed = false; // ré-émettre la révélation à toute la room
       endRound(game);
@@ -599,7 +604,6 @@ io.on("connection", (socket) => {
     if (!game || socket.id !== game.hostId || game.state !== "LOBBY") return;
     const opts = game.opts;
     if ([2, 3, 4, 5].includes(+o.tracksPerCat)) opts.tracksPerCat = +o.tracksPerCat;
-    if ([15, 25, 35, 45].includes(+o.roundSeconds)) opts.roundSeconds = +o.roundSeconds;
     if (["libre", "oneshot"].includes(o.answerMode)) opts.answerMode = o.answerMode;
     if (DIFFICULTIES[o.difficulty]) opts.difficulty = o.difficulty;
     if (["players", "host"].includes(o.playlistMode)) opts.playlistMode = o.playlistMode;
@@ -777,7 +781,7 @@ io.on("connection", (socket) => {
     if (oneshot) round.attempts.set(p.key, text);
 
     const remaining = Math.max(0, round.endsAt - Date.now());
-    const ratio = remaining / (game.opts.roundSeconds * 1000);
+    const ratio = remaining / (round.endsAt - round.startsAt);
     // Multiplicateur : mode "un seul essai" ×2, série +15 %/manche (plafonnée),
     // difficulté (écoute courte = plus de points)
     const mult = (oneshot ? CONFIG.ONESHOT_MULT : 1)

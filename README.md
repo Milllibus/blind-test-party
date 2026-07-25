@@ -47,7 +47,7 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 
 ## Réglages depuis le lobby (par partie)
 
-- **Extraits par catégorie** (2 à 5) et **durée par extrait** (15 à 45 s).
+- **Extraits par catégorie** (2 à 5). La durée d'une manche est tirée au sort entre **30 et 45 s** à chaque extrait (les previews iTunes durent 30 s : si le chrono va au-delà, on continue de répondre après la fin de la musique).
 - **Difficulté** : 😌 facile (les gros tubes), 🎚️ moyen (points ×1,25) ou 🔥 difficile (pépites méconnues, points ×1,5). iTunes ne publie pas les nombres d'écoutes mais classe ses résultats par popularité : le niveau détermine si les extraits sont piochés en haut, au milieu ou au fond de ce classement. Les reprises karaoké/tribute sont filtrées.
 - **Mode réponses** : essais illimités, ou **un seul essai** (points ×2).
 - **Mode playlist** : chacun sa catégorie, ou **thèmes imposés** par l'écran (séparés par des virgules).
@@ -55,7 +55,7 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 - Sons d'ambiance sur l'écran (désactivables via 🔊), podium animé avec confettis, historique de la playlist en fin de partie.
 - Les téléphones **se reconnectent tout seuls** (page rechargée, réseau qui saute) sans perdre leur score.
 
-Valeurs par défaut dans `CONFIG` (server.js) : `TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS` (25), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min).
+Valeurs par défaut dans `CONFIG` (server.js) : `TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS_MIN`/`ROUND_SECONDS_MAX` (30–45), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min).
 
 ## Détails techniques
 

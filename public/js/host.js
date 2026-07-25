@@ -149,7 +149,6 @@ socket.on("host:init", ({ code, lanUrl, remoteAudio, opts }) => {
 
   if (opts) {
     $("optTracks").value = String(opts.tracksPerCat);
-    $("optSeconds").value = String(opts.roundSeconds);
     $("optDifficulty").value = opts.difficulty || "facile";
     $("optAnswerMode").value = opts.answerMode;
     $("optPlaylistMode").value = opts.playlistMode;
@@ -177,14 +176,13 @@ function sendOptions() {
   $("optThemes").classList.toggle("hidden", $("optPlaylistMode").value !== "host");
   socket.emit("host:setOptions", {
     tracksPerCat: +$("optTracks").value,
-    roundSeconds: +$("optSeconds").value,
     difficulty: $("optDifficulty").value,
     answerMode: $("optAnswerMode").value,
     playlistMode: $("optPlaylistMode").value,
     themes: $("optThemes").value.split(",").map((s) => s.trim()).filter(Boolean),
   });
 }
-["optTracks", "optSeconds", "optDifficulty", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
+["optTracks", "optDifficulty", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
   $(id).addEventListener("change", sendOptions)
 );
 let themesTimer = null;
