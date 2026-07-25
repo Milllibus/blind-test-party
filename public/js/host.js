@@ -144,6 +144,7 @@ socket.on("host:init", ({ code, lanUrl, remoteAudio, opts }) => {
   if (opts) {
     $("optTracks").value = String(opts.tracksPerCat);
     $("optSeconds").value = String(opts.roundSeconds);
+    $("optDifficulty").value = opts.difficulty || "facile";
     $("optAnswerMode").value = opts.answerMode;
     $("optPlaylistMode").value = opts.playlistMode;
     $("optThemes").value = (opts.themes || []).join(", ");
@@ -171,12 +172,13 @@ function sendOptions() {
   socket.emit("host:setOptions", {
     tracksPerCat: +$("optTracks").value,
     roundSeconds: +$("optSeconds").value,
+    difficulty: $("optDifficulty").value,
     answerMode: $("optAnswerMode").value,
     playlistMode: $("optPlaylistMode").value,
     themes: $("optThemes").value.split(",").map((s) => s.trim()).filter(Boolean),
   });
 }
-["optTracks", "optSeconds", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
+["optTracks", "optSeconds", "optDifficulty", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
   $(id).addEventListener("change", sendOptions)
 );
 let themesTimer = null;
@@ -249,11 +251,13 @@ socket.on("game:generated", ({ total, categories }) => {
 });
 
 /* ---------- Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds, mode, hasWork }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds, mode, difficulty, hasWork }) => {
   show("screen-play");
   const modeTag = mode === "oneshot" ? " · ⚡ un seul essai" : "";
+  const diffTag = difficulty === "moyen" ? " · 🎚️ niveau moyen"
+    : difficulty === "difficile" ? " · 🔥 niveau difficile" : "";
   const workTag = hasWork ? " · 🎬 film/série à deviner !" : "";
-  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}${workTag}`;
+  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}${diffTag}${workTag}`;
   $("foundTicker").innerHTML = "Écoutez bien… répondez sur vos téléphones !";
   $("btnSkip").classList.add("hidden");
   $("hintBox").classList.add("hidden");

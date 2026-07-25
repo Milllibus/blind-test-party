@@ -42,6 +42,17 @@ const CONFIG = {
   HOST_GRACE_MS: 2 * 60 * 1000,      // délai pour qu'un hôte déconnecté revienne
 };
 
+/* ---------- Niveaux de difficulté ----------
+   L'API iTunes ne donne pas le nombre d'écoutes, mais elle classe ses
+   résultats par popularité : le rang d'un titre sert d'indicateur.
+   Facile = le haut du classement (les tubes que tout le monde connaît),
+   difficile = le fond du catalogue. Les niveaux durs rapportent plus. */
+const DIFFICULTIES = {
+  facile:    { band: [0, 0.3],     mult: 1 },    // top du classement
+  moyen:     { band: [0.25, 0.65], mult: 1.25 },
+  difficile: { band: [0.55, 1],    mult: 1.5 },  // pépites méconnues
+};
+
 /* ---------- IP locale (affichage console + fallback QR en LAN) ---------- */
 function getLocalIp() {
   const nets = os.networkInterfaces();
@@ -78,6 +89,7 @@ function defaultOpts() {
     tracksPerCat: CONFIG.TRACKS_PER_CATEGORY,
     roundSeconds: CONFIG.ROUND_SECONDS,
     answerMode: "libre",      // "libre" | "oneshot" (un seul essai, points ×2)
+    difficulty: "facile",     // "facile" | "moyen" | "difficile" (durée d'écoute)
     playlistMode: "players",  // "players" (chacun sa catégorie) | "host" (thèmes imposés)
     themes: [],
   };
@@ -279,12 +291,16 @@ function soundtrackWork(collectionName) {
 /* ============================================================
    API iTunes
    ============================================================ */
+/* Reprises karaoké / tributes qui polluent le fond du classement */
+const JUNK_RE = /karaoke|tribute|made famous|in the style of|originally performed|8[- ]bit|music box|lullaby|ringtone/i;
+
 async function searchItunes(term) {
-  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=60&country=${CONFIG.COUNTRY}`;
+  const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&media=music&entity=song&limit=100&country=${CONFIG.COUNTRY}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`iTunes HTTP ${res.status}`);
   const data = await res.json();
-  return (data.results || []).filter((t) => t.previewUrl && t.trackName && t.artistName);
+  return (data.results || []).filter((t) => t.previewUrl && t.trackName && t.artistName
+    && !JUNK_RE.test(`${t.trackName} ${t.artistName} ${t.collectionName || ""}`));
 }
 
 function shuffle(arr) {
@@ -296,17 +312,26 @@ function shuffle(arr) {
   return a;
 }
 
-function pickTracks(results, n, category) {
-  const shuffled = shuffle(results);
+function pickTracks(results, n, category, difficulty) {
+  // iTunes classe ses résultats par popularité : on pioche dans la tranche
+  // du classement qui correspond à la difficulté. Le reste sert de secours
+  // si la tranche ne suffit pas (peu de résultats, doublons…).
+  const { band } = DIFFICULTIES[difficulty] || DIFFICULTIES.facile;
+  const from = Math.floor(results.length * band[0]);
+  const to = Math.ceil(results.length * band[1]);
+  const pool = [
+    ...shuffle(results.slice(from, to)),
+    ...shuffle([...results.slice(0, from), ...results.slice(to)]),
+  ];
   const picked = [];
   const seenArtists = new Set();
   const seenTitles = new Set();
-  for (const t of shuffled) {
+  for (const t of pool) {
     const artistKey = normalize(t.artistName);
     const titleKey = normalize(t.trackName);
     if (seenTitles.has(titleKey)) continue;
     if (seenArtists.has(artistKey) && picked.length < n) {
-      const remaining = shuffled.filter((x) => !seenArtists.has(normalize(x.artistName))).length;
+      const remaining = pool.filter((x) => !seenArtists.has(normalize(x.artistName))).length;
       if (remaining > n - picked.length) continue;
     }
     seenArtists.add(artistKey);
@@ -359,6 +384,7 @@ function startRound(game) {
     endsAt: game.round.endsAt,
     seconds: game.opts.roundSeconds,
     mode: game.opts.answerMode,
+    difficulty: game.opts.difficulty,
     hasWork: !!track.work,
   };
   // L'écran hôte de CETTE room joue le son
@@ -440,7 +466,7 @@ function buildPlaylistAndStart(game) {
   const all = [...game.players.values()];
   let tracks = [];
   for (const p of all) {
-    tracks = tracks.concat(pickTracks(p._results, game.opts.tracksPerCat, p.category));
+    tracks = tracks.concat(pickTracks(p._results, game.opts.tracksPerCat, p.category, game.opts.difficulty));
     delete p._results;
   }
   game.tracks = shuffle(tracks);
@@ -457,7 +483,7 @@ async function buildHostPlaylist(game) {
   const cats = [];
   for (const theme of game.opts.themes) {
     const results = await searchItunes(theme);
-    const picked = pickTracks(results, game.opts.tracksPerCat, theme);
+    const picked = pickTracks(results, game.opts.tracksPerCat, theme, game.opts.difficulty);
     if (picked.length < 2) throw new Error(`Pas assez de résultats pour « ${theme} »`);
     tracks = tracks.concat(picked);
     cats.push({ name: null, category: theme });
@@ -476,7 +502,7 @@ function sendSnapshot(game, socket, p) {
     const payload = {
       index: game.current, total: game.tracks.length, category: track.category,
       endsAt: game.round.endsAt, seconds: game.opts.roundSeconds, mode: game.opts.answerMode,
-      hasWork: !!track.work,
+      difficulty: game.opts.difficulty, hasWork: !!track.work,
     };
     if (game.remoteAudio) payload.previewUrl = track.previewUrl;
     socket.emit("round:start", payload);
@@ -536,6 +562,7 @@ io.on("connection", (socket) => {
         endsAt: game.round.endsAt,
         seconds: game.opts.roundSeconds,
         mode: game.opts.answerMode,
+        difficulty: game.opts.difficulty,
         hasWork: !!track.work,
         previewUrl: track.previewUrl,
       });
@@ -563,6 +590,7 @@ io.on("connection", (socket) => {
     if ([2, 3, 4, 5].includes(+o.tracksPerCat)) opts.tracksPerCat = +o.tracksPerCat;
     if ([15, 25, 35, 45].includes(+o.roundSeconds)) opts.roundSeconds = +o.roundSeconds;
     if (["libre", "oneshot"].includes(o.answerMode)) opts.answerMode = o.answerMode;
+    if (DIFFICULTIES[o.difficulty]) opts.difficulty = o.difficulty;
     if (["players", "host"].includes(o.playlistMode)) opts.playlistMode = o.playlistMode;
     if (Array.isArray(o.themes)) {
       opts.themes = o.themes.map((t) => String(t).trim().slice(0, 40)).filter((t) => t.length >= 2).slice(0, 6);
@@ -739,9 +767,11 @@ io.on("connection", (socket) => {
 
     const remaining = Math.max(0, round.endsAt - Date.now());
     const ratio = remaining / (game.opts.roundSeconds * 1000);
-    // Multiplicateur : mode "un seul essai" ×2, série +15 %/manche (plafonnée)
+    // Multiplicateur : mode "un seul essai" ×2, série +15 %/manche (plafonnée),
+    // difficulté (écoute courte = plus de points)
     const mult = (oneshot ? CONFIG.ONESHOT_MULT : 1)
-      * (1 + CONFIG.STREAK_STEP * Math.min(p.streak || 0, CONFIG.STREAK_MAX));
+      * (1 + CONFIG.STREAK_STEP * Math.min(p.streak || 0, CONFIG.STREAK_MAX))
+      * (DIFFICULTIES[game.opts.difficulty] || DIFFICULTIES.facile).mult;
     let gained = 0;
     let found = null;
 

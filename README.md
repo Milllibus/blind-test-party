@@ -48,6 +48,7 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 ## Réglages depuis le lobby (par partie)
 
 - **Extraits par catégorie** (2 à 5) et **durée par extrait** (15 à 45 s).
+- **Difficulté** : 😌 facile (les gros tubes), 🎚️ moyen (points ×1,25) ou 🔥 difficile (pépites méconnues, points ×1,5). iTunes ne publie pas les nombres d'écoutes mais classe ses résultats par popularité : le niveau détermine si les extraits sont piochés en haut, au milieu ou au fond de ce classement. Les reprises karaoké/tribute sont filtrées.
 - **Mode réponses** : essais illimités, ou **un seul essai** (points ×2).
 - **Mode playlist** : chacun sa catégorie, ou **thèmes imposés** par l'écran (séparés par des virgules).
 - Indice automatique à mi-manche sur le grand écran (pochette floutée + initiales du titre).
