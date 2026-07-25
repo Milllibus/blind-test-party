@@ -108,15 +108,18 @@ audio.addEventListener("playing", () => {
 
 /* ---------- Timer (anneau + chiffres + bips de fin) ---------- */
 const RING_LEN = 754; // 2πr avec r = 120
-let rafId = null;
-function runTimer(endsAt, totalSeconds) {
-  cancelAnimationFrame(rafId);
+let timerInt = null;
+function runTimer(endsAt, totalSeconds, serverNow) {
+  clearInterval(timerInt);
+  // endsAt est une heure SERVEUR : si l'horloge du PC est décalée, on corrige
+  const skew = serverNow ? serverNow - Date.now() : 0;
+  const localEnd = endsAt - skew;
   const ring = $("ringFg");
   const digits = $("timerDigits");
   const totalMs = totalSeconds * 1000;
   let lastShown = null;
   function frame() {
-    const left = Math.max(0, endsAt - Date.now());
+    const left = Math.max(0, localEnd - Date.now());
     const ratio = left / totalMs;
     ring.style.strokeDashoffset = String(RING_LEN * (1 - ratio));
     const secs = Math.ceil(left / 1000);
@@ -126,9 +129,12 @@ function runTimer(endsAt, totalSeconds) {
     digits.classList.toggle("warning", warn);
     if (warn && secs !== lastShown && secs > 0) sfx.tick();
     lastShown = secs;
-    if (left > 0) rafId = requestAnimationFrame(frame);
+    if (left <= 0) clearInterval(timerInt);
   }
   frame();
+  // setInterval et pas requestAnimationFrame : le chrono continue même
+  // si la fenêtre passe en arrière-plan (rAF est gelé par le navigateur)
+  timerInt = setInterval(frame, 100);
 }
 
 /* ---------- Connexion : créer (ou récupérer) une partie ---------- */
@@ -251,7 +257,7 @@ socket.on("game:generated", ({ total, categories }) => {
 });
 
 /* ---------- Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds, mode, difficulty, hasWork }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, endsAt, now, seconds, mode, difficulty, hasWork }) => {
   show("screen-play");
   const modeTag = mode === "oneshot" ? " · ⚡ un seul essai" : "";
   const diffTag = difficulty === "moyen" ? " · 🎚️ niveau moyen"
@@ -265,7 +271,7 @@ socket.on("round:start", ({ index, total, category, previewUrl, endsAt, seconds,
   audio.src = previewUrl;
   audio.currentTime = 0;
   audio.play().catch(() => $("btnSkip").classList.remove("hidden"));
-  runTimer(endsAt, seconds);
+  runTimer(endsAt, seconds, now);
 });
 
 /* Indice de mi-manche : pochette floutée + initiales du titre */
@@ -333,7 +339,7 @@ $("grantList").addEventListener("click", (e) => {
 
 socket.on("round:reveal", ({ title, artist, work, artwork, category, finders, leaderboard, isLast, refused }) => {
   audio.pause();
-  cancelAnimationFrame(rafId);
+  clearInterval(timerInt);
   show("screen-reveal");
   sfx.reveal();
 

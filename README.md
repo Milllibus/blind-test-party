@@ -37,7 +37,7 @@ Le QR code s'adapte tout seul : il pointe vers l'adresse du site (`location.orig
 | Film / série / Disney 🎬 | 75 + bonus vitesse (jusqu'à +37) |
 | Artiste | 50 + bonus vitesse (jusqu'à +25) |
 
-Le film/la série n'est à deviner que si l'extrait vient d'une **bande originale** (détecté depuis le nom de l'album iTunes : « Vaiana (Bande Originale du Film) » → Vaiana). Une 3ᵉ pastille apparaît alors sur les téléphones.
+Le film/la série n'est à deviner que si l'extrait vient d'une **bande originale**, détecté depuis le titre du morceau ou le nom de l'album iTunes : « Réflexion (De "Mulan") » → Mulan, « Vaiana (Bande Originale du Film) » → Vaiana. Une 3ᵉ pastille apparaît alors sur les téléphones.
 
 - Réponses **tolérantes aux fautes** (normalisation accents/ponctuation/« feat. » + distance de Levenshtein). Manche écourtée si tout le monde a tout trouvé.
 - **Artistes multiples** : sur « David Guetta & Sia », citer un seul des deux suffit.

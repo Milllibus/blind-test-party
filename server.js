@@ -264,14 +264,23 @@ function titleMask(title) {
     .join("   ");
 }
 
-/* L'album d'une bande originale contient le nom du film / de la série :
-   "Vaiana (Bande Originale Française du Film)" → "Vaiana".
-   Retourne null si l'album ne ressemble pas à une B.O. (compilations…). */
-function soundtrackWork(collectionName) {
+/* Nom du film / de la série cité entre guillemets dans une parenthèse :
+   « Réflexion (De "Mulan") », « Speechless (From "Aladdin") »,
+   « L'air du vent (De "Pocahontas"/Bande Originale Française du Film) »,
+   « Zoo (Musique de la série "Zootopie+") »… iTunes le met tantôt dans
+   le titre du morceau, tantôt dans le nom de l'album. */
+const QUOTED_WORK_RE = /\([^)"«“]*\b(?:de|du|des|from|d[’']après)\b[^)"«“]*["«“]\s*([^"»”]{2,}?)\s*["»”][^)]*\)/i;
+
+/* Le film / la série à deviner, cherché dans le titre du morceau PUIS
+   dans le nom de l'album : "Vaiana (Bande Originale du Film)" → "Vaiana".
+   Retourne null si rien ne ressemble à une B.O. (compilations…). */
+function soundtrackWork(collectionName, trackName) {
+  for (const source of [String(trackName || ""), String(collectionName || "")]) {
+    const m = source.match(QUOTED_WORK_RE);
+    // "(From "Serie (Season 2)")" → on retire la saison / le suffixe entre parenthèses
+    if (m) return m[1].trim().replace(/\s*\([^)]*\)\s*$/, "").trim();
+  }
   const raw = String(collectionName || "");
-  // Singles : « Zoo (De "Zootopie 2") » / « (From "Lilo & Stitch") »
-  const single = raw.match(/\((?:de|from|tiré de|extrait de)\s+["«“]\s*([^)"»”]+?)\s*["»”]\s*\)/i);
-  if (single && single[1].trim().length >= 2) return single[1].trim();
   if (!/soundtrack|score\)|bande originale|b\.o\.|motion picture|music from|musique (du film|de la serie|de la série)|cast recording|original (series|television)|movie|du film|de la série/i.test(raw)) {
     return null;
   }
@@ -337,7 +346,7 @@ function pickTracks(results, n, category, difficulty) {
     seenArtists.add(artistKey);
     seenTitles.add(titleKey);
     // Film/série à deviner en plus, sauf s'il se confond avec le titre ou l'artiste
-    let work = soundtrackWork(t.collectionName);
+    let work = soundtrackWork(t.collectionName, t.trackName);
     if (work && (fuzzyMatch(work, t.trackName) || fuzzyMatch(t.trackName, work)
       || fuzzyMatch(work, t.artistName) || fuzzyMatch(t.artistName, work))) {
       work = null;
@@ -382,6 +391,7 @@ function startRound(game) {
     total: game.tracks.length,
     category: track.category,
     endsAt: game.round.endsAt,
+    now: Date.now(), // horloge serveur : le client corrige son décalage
     seconds: game.opts.roundSeconds,
     mode: game.opts.answerMode,
     difficulty: game.opts.difficulty,
@@ -501,8 +511,8 @@ function sendSnapshot(game, socket, p) {
     const track = game.tracks[game.current];
     const payload = {
       index: game.current, total: game.tracks.length, category: track.category,
-      endsAt: game.round.endsAt, seconds: game.opts.roundSeconds, mode: game.opts.answerMode,
-      difficulty: game.opts.difficulty, hasWork: !!track.work,
+      endsAt: game.round.endsAt, now: Date.now(), seconds: game.opts.roundSeconds,
+      mode: game.opts.answerMode, difficulty: game.opts.difficulty, hasWork: !!track.work,
     };
     if (game.remoteAudio) payload.previewUrl = track.previewUrl;
     socket.emit("round:start", payload);
@@ -560,6 +570,7 @@ io.on("connection", (socket) => {
         total: game.tracks.length,
         category: track.category,
         endsAt: game.round.endsAt,
+        now: Date.now(),
         seconds: game.opts.roundSeconds,
         mode: game.opts.answerMode,
         difficulty: game.opts.difficulty,
