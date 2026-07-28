@@ -2,7 +2,7 @@
 const socket = io();
 const $ = (id) => document.getElementById(id);
 
-const screens = ["screen-lobby", "screen-categories", "screen-generating", "screen-play", "screen-reveal", "screen-podium"];
+const screens = ["screen-lobby", "screen-categories", "screen-generating", "screen-play", "screen-reveal", "screen-elimination", "screen-podium"];
 function show(id) {
   screens.forEach((s) => $(s).classList.toggle("active", s === id));
 }
@@ -45,6 +45,8 @@ const sfx = {
   tick: () => blip(1200, 0, 0.05, "square", 0.07),
   reveal: () => { blip(659, 0, 0.12); blip(523, 0.1, 0.2); },
   drum: () => { for (let i = 0; i < 16; i++) blip(150 + Math.random() * 70, i * 0.07, 0.05, "square", 0.09); },
+  // Battle royale : descente sinistre quand quelqu'un saute
+  eliminated: () => [440, 370, 294, 220, 165].forEach((f, i) => blip(f, i * 0.16, 0.3, "sawtooth", 0.16)),
   fanfare: () => {
     [523, 659, 784, 1047].forEach((f, i) => blip(f, i * 0.14, 0.22, "triangle", 0.22));
     blip(1319, 0.62, 0.55, "triangle", 0.2);
@@ -149,11 +151,13 @@ socket.on("host:init", ({ code, lanUrl, remoteAudio, opts }) => {
 
   if (opts) {
     $("optTracks").value = String(opts.tracksPerCat);
+    $("optGameMode").value = opts.gameMode || "classic";
     $("optDifficulty").value = opts.difficulty || "facile";
     $("optAnswerMode").value = opts.answerMode;
     $("optPlaylistMode").value = opts.playlistMode;
     $("optThemes").value = (opts.themes || []).join(", ");
     $("optThemes").classList.toggle("hidden", opts.playlistMode !== "host");
+    applyGameMode();
   }
 
   // Adresse à scanner : l'URL du site lui-même.
@@ -171,18 +175,26 @@ $("chkRemoteAudio").addEventListener("change", (e) => {
 });
 
 /* ---------- Réglages de la partie ---------- */
+/* Battle royale : 3 extraits par thème, non modifiable */
+function applyGameMode() {
+  const battle = $("optGameMode").value === "battle";
+  if (battle) $("optTracks").value = "3";
+  $("optTracks").disabled = battle;
+}
 function sendOptions() {
   $("lobbyError").textContent = "";
+  applyGameMode();
   $("optThemes").classList.toggle("hidden", $("optPlaylistMode").value !== "host");
   socket.emit("host:setOptions", {
     tracksPerCat: +$("optTracks").value,
+    gameMode: $("optGameMode").value,
     difficulty: $("optDifficulty").value,
     answerMode: $("optAnswerMode").value,
     playlistMode: $("optPlaylistMode").value,
     themes: $("optThemes").value.split(",").map((s) => s.trim()).filter(Boolean),
   });
 }
-["optTracks", "optDifficulty", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
+["optTracks", "optGameMode", "optDifficulty", "optAnswerMode", "optPlaylistMode"].forEach((id) =>
   $(id).addEventListener("change", sendOptions)
 );
 let themesTimer = null;
@@ -255,13 +267,14 @@ socket.on("game:generated", ({ total, categories }) => {
 });
 
 /* ---------- Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, endsAt, now, seconds, mode, difficulty, hasWork }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, endsAt, now, seconds, mode, difficulty, hasWork, battle, elimAfter }) => {
   show("screen-play");
   const modeTag = mode === "oneshot" ? " · ⚡ un seul essai" : "";
   const diffTag = difficulty === "moyen" ? " · 🎚️ niveau moyen"
     : difficulty === "difficile" ? " · 🔥 niveau difficile" : "";
   const workTag = hasWork ? " · 🎬 film/série à deviner !" : "";
-  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}${diffTag}${workTag}`;
+  const battleTag = battle ? (elimAfter ? " · ⚔️ 💀 ÉLIMINATION après cet extrait !" : " · ⚔️ battle royale") : "";
+  $("roundInfo").textContent = `Extrait ${index + 1} / ${total} · Catégorie : ${category}${modeTag}${diffTag}${workTag}${battleTag}`;
   $("foundTicker").innerHTML = "Écoutez bien… répondez sur vos téléphones !";
   $("btnSkip").classList.add("hidden");
   $("hintBox").classList.add("hidden");
@@ -306,7 +319,7 @@ function renderFinders(finders) {
 function renderMiniBoard(leaderboard) {
   $("miniBoard").innerHTML = leaderboard
     .slice(0, 6)
-    .map((p) => `<span>${p.rank}. <b>${escapeHtml(p.name)}</b> ${p.score}</span>`)
+    .map((p) => `<span>${p.rank}. <b>${escapeHtml(p.name)}</b> ${p.score}${p.alive === false ? " 💀" : ""}</span>`)
     .join("");
 }
 
@@ -335,7 +348,7 @@ $("grantList").addEventListener("click", (e) => {
   b.remove();
 });
 
-socket.on("round:reveal", ({ title, artist, work, artwork, category, finders, leaderboard, isLast, refused }) => {
+socket.on("round:reveal", ({ title, artist, work, artwork, category, finders, leaderboard, isLast, checkpoint, refused }) => {
   audio.pause();
   clearInterval(timerInt);
   show("screen-reveal");
@@ -352,8 +365,41 @@ socket.on("round:reveal", ({ title, artist, work, artwork, category, finders, le
   renderMiniBoard(leaderboard);
   renderGrant(refused, !!work);
 
-  $("btnNext").textContent = isLast ? "Voir le classement" : "Extrait suivant";
+  // En battle royale, la révélation du 3ᵉ extrait mène au verdict, pas à la suite
+  $("btnNext").textContent = checkpoint ? "💀 Qui est éliminé ?"
+    : isLast ? "Voir le classement" : "Extrait suivant";
 });
+
+/* ---------- Élimination (battle royale) ---------- */
+socket.on("battle:elimination", ({ eliminated, remaining, nobody, isOver }) => {
+  audio.pause();
+  clearInterval(timerInt);
+  show("screen-elimination");
+
+  $("elimTitle").classList.toggle("safe", !!nobody);
+  if (nobody) {
+    sfx.reveal();
+    $("elimTitle").textContent = "Personne n’est éliminé !";
+    $("elimNames").textContent = "Égalité parfaite au fond du classement — tout le monde continue. 😮‍💨";
+  } else {
+    sfx.eliminated();
+    const names = eliminated.map((e) => e.name).join(" et ");
+    $("elimTitle").textContent = eliminated.length > 1 ? "Double élimination !" : "Éliminé·e !";
+    $("elimNames").innerHTML = `💀 <b>${escapeHtml(names)}</b> quitte${eliminated.length > 1 ? "nt" : ""} la partie `
+      + `avec ${eliminated[0].score} pts.`;
+  }
+
+  const ul = $("elimRemaining");
+  ul.innerHTML = "";
+  for (const r of remaining) {
+    const li = document.createElement("li");
+    li.innerHTML = `<b>${escapeHtml(r.name)}</b> · ${r.score} pts`;
+    ul.appendChild(li);
+  }
+
+  $("btnElimNext").textContent = isOver ? "Voir le classement final" : "Extrait suivant";
+});
+$("btnElimNext").addEventListener("click", () => socket.emit("host:next"));
 
 /* L'hôte a accordé un point : mise à jour sans changer d'écran */
 socket.on("reveal:update", ({ finders, leaderboard }) => {

@@ -2,7 +2,7 @@
 const socket = io();
 const $ = (id) => document.getElementById(id);
 
-const screens = ["p-join", "p-wait", "p-category", "p-category-ok", "p-round", "p-reveal", "p-podium"];
+const screens = ["p-join", "p-wait", "p-category", "p-category-ok", "p-round", "p-reveal", "p-elim", "p-podium"];
 function show(id) {
   screens.forEach((s) => $(s).classList.toggle("active", s === id));
 }
@@ -12,6 +12,7 @@ let myScore = 0;
 let lastGain = 0;
 let roundMode = "libre";
 let roundHasWork = false;
+let amEliminated = false; // battle royale : spectateur jusqu'à la fin de la partie
 
 /* Clé persistante : permet de retrouver sa place après un rechargement */
 function makeKey() {
@@ -152,17 +153,29 @@ $("btnCat").addEventListener("click", sendCategory);
 $("catInput").addEventListener("keydown", (e) => e.key === "Enter" && sendCategory());
 
 /* ---------- 3. Manche ---------- */
-socket.on("round:start", ({ index, total, category, previewUrl, mode, hasWork }) => {
+socket.on("round:start", ({ index, total, category, previewUrl, mode, hasWork, battle, elimAfter, eliminated }) => {
   lastGain = 0;
   roundMode = mode || "libre";
   roundHasWork = !!hasWork;
-  show("p-round");
   if (previewUrl) {
     remoteAudio.src = previewUrl;
     remoteAudio.currentTime = 0;
     remoteAudio.play().catch(() => {});
   }
-  $("pRoundInfo").textContent = `Extrait ${index + 1} / ${total} · ${category}`;
+
+  // Battle royale : les éliminés suivent la partie en spectateurs
+  if (battle && eliminated) {
+    amEliminated = true;
+    show("p-elim");
+    $("pElimTitle").classList.remove("safe");
+    $("pElimTitle").textContent = "💀 Tu es éliminé";
+    $("pElimText").textContent = `Extrait ${index + 1} / ${total} · ${category} — profite du spectacle sur le grand écran !`;
+    return;
+  }
+
+  show("p-round");
+  $("pRoundInfo").textContent = `Extrait ${index + 1} / ${total} · ${category}`
+    + (battle ? (elimAfter ? " · 💀 élimination après cet extrait !" : " · ⚔️") : "");
   setPills(false, false, false);
   const fb = $("answerFeedback");
   fb.className = "answer-feedback";
@@ -177,8 +190,9 @@ socket.on("round:start", ({ index, total, category, previewUrl, mode, hasWork })
 });
 
 /* État renvoyé après une reconnexion en pleine manche */
-socket.on("answer:state", ({ titleDone, artistDone, workDone, locked, score }) => {
+socket.on("answer:state", ({ titleDone, artistDone, workDone, locked, eliminated, score }) => {
   setScore(score);
+  if (eliminated) { amEliminated = true; return; } // l'écran spectateur est déjà affiché
   setPills(titleDone, artistDone, workDone);
   if (locked || allFound({ titleDone, artistDone, workDone })) {
     lockAnswers("Réponses enregistrées — attends la fin du chrono…");
@@ -240,10 +254,37 @@ socket.on("score:sync", ({ score, gained, what }) => {
 /* ---------- 4. Révélation ---------- */
 socket.on("round:reveal", ({ title, artist, work }) => {
   remoteAudio.pause();
+  if (amEliminated) {
+    // Spectateur : on donne la réponse sans parler de points
+    $("pElimText").textContent = `C’était « ${title} » — ${artist}${work ? ` · 🎬 ${work}` : ""}`;
+    return;
+  }
   show("p-reveal");
   $("pRevealTitle").textContent = title;
   $("pRevealArtist").textContent = artist + (work ? ` · 🎬 ${work}` : "");
   $("myGain").textContent = lastGain > 0 ? `+${lastGain} pts pour toi 🎉` : "0 pt cette fois… 😬";
+});
+
+/* ---------- 4bis. Verdict battle royale ---------- */
+socket.on("battle:elimination", ({ eliminated, remaining, nobody, isOver, eliminatedYou, aliveYou }) => {
+  remoteAudio.pause();
+  show("p-elim");
+  $("pElimTitle").classList.toggle("safe", !eliminatedYou && !!aliveYou);
+  if (eliminatedYou) {
+    amEliminated = true;
+    $("pElimTitle").textContent = "💀 Tu es éliminé !";
+    $("pElimText").textContent = `Dernier au score avec ${myScore} pts. Tu restes en spectateur jusqu’au bout.`;
+  } else if (aliveYou) {
+    const names = eliminated.map((e) => e.name).join(" et ");
+    $("pElimTitle").textContent = "😮‍💨 Tu survis !";
+    $("pElimText").textContent = nobody
+      ? `Égalité au fond du classement : personne ne saute. Vous êtes encore ${remaining.length} en lice.`
+      : `${names} saute${eliminated.length > 1 ? "nt" : ""}. Vous êtes encore ${remaining.length} en lice`
+        + (isOver ? " — dernière ligne droite !" : ".");
+  } else {
+    $("pElimTitle").textContent = "💀 Éliminé";
+    $("pElimText").textContent = `Il reste ${remaining.length} joueur·euse·s en lice.`;
+  }
 });
 
 /* ---------- 5. Podium ---------- */
@@ -261,6 +302,7 @@ socket.on("game:reset", ({ code } = {}) => {
   remoteAudio.pause();
   setScore(0);
   myName = "";
+  amEliminated = false;
   localStorage.removeItem("btRoom"); // repartir proprement : re-choisir un pseudo
   $("nameInput").value = localStorage.getItem("btName") || "";
   if (code) $("codeInput").value = code;

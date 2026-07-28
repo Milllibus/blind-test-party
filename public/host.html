@@ -32,6 +32,12 @@
           <li class="player-empty">Personne pour l’instant… scannez le QR code !</li>
         </ul>
         <div class="settings">
+          <label>Mode de jeu
+            <select id="optGameMode">
+              <option value="classic" selected>🎉 Classique — tout le monde joue jusqu’au bout</option>
+              <option value="battle">⚔️ Battle royale — le dernier au score est éliminé toutes les 3 chansons</option>
+            </select>
+          </label>
           <label>Extraits / catégorie
             <select id="optTracks">
               <option value="2">2</option>
@@ -129,6 +135,16 @@
     </div>
     <div class="mini-board" id="miniBoard"></div>
     <button class="btn btn-spot" id="btnNext">Extrait suivant</button>
+  </section>
+
+  <!-- ÉCRAN 5bis : ÉLIMINATION (battle royale) -->
+  <section class="screen" id="screen-elimination">
+    <p class="eyebrow center">⚔️ Battle royale — verdict</p>
+    <h1 class="display" id="elimTitle">Élimination !</h1>
+    <p class="sub center" id="elimNames"></p>
+    <p class="eyebrow center">Encore en vie</p>
+    <ul class="finders" id="elimRemaining"></ul>
+    <button class="btn btn-spot" id="btnElimNext">Extrait suivant</button>
   </section>
 
   <!-- ÉCRAN 6 : PODIUM -->
