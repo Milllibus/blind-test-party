@@ -108,6 +108,7 @@ body {
 .display.sm { font-size: clamp(1.5rem, 6.5vw, 2.2rem); }
 .sub { color: var(--brume); font-size: 1.05rem; max-width: 46ch; }
 .sub.soft { font-size: 0.9rem; }
+.sub.center { text-align: center; }
 
 /* ---------- Boutons & champs ---------- */
 .btn {
@@ -383,6 +384,15 @@ body {
 }
 .finders li b { color: var(--menthe); }
 .finders .nobody { background: var(--scene); border-color: var(--scene-2); color: var(--brume); }
+
+/* ---------- Battle royale : écran du verdict ---------- */
+#screen-elimination .display { color: var(--neon); text-align: center; }
+#screen-elimination .display.safe { color: var(--menthe); }
+#elimNames { font-size: 1.15rem; }
+#elimNames b { color: var(--craie); font-weight: 700; }
+/* Les survivants restent en vert (même style que .finders) */
+#p-elim .display { color: var(--neon); }
+#p-elim .display.safe { color: var(--menthe); }
 
 .mini-board { display: flex; flex-wrap: wrap; gap: 8px 22px; justify-content: center; color: var(--brume); font-size: 0.95rem; }
 .mini-board b { color: var(--craie); }

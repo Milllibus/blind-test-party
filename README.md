@@ -45,9 +45,20 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 - **Presque !** : une réponse proche affiche « tu chauffes » sur le téléphone.
 - **Litiges** : sur l'écran de révélation, l'hôte peut accorder un point refusé par le matching.
 
+## ⚔️ Mode battle royale
+
+Choisi dans le lobby, à la place du mode classique. **3 chansons par thème**, puis le **dernier au score est éliminé**. On enchaîne jusqu'à ce qu'il ne reste qu'une personne — la partie s'arrête à ce moment-là, même s'il restait des extraits.
+
+- L'écran affiche « 💀 élimination après cet extrait ! » sur la 3ᵉ chanson de chaque bloc, puis un écran de verdict avec les survivants et leurs scores.
+- Les éliminés **restent connectés en spectateurs** : ils voient les extraits et les réponses sur leur téléphone, mais ne peuvent plus marquer.
+- **Égalité au fond du classement** : si tous les derniers ex æquo représentent l'ensemble des survivants, personne ne saute et la manche suivante démarre.
+- Le classement final suit l'**ordre d'élimination** (le survivant gagne, puis le dernier éliminé, etc.), le score ne départage qu'en cas d'égalité.
+- Le nombre d'extraits par catégorie est verrouillé à 3 dans ce mode ; l'hôte peut toujours arbitrer les litiges avant le verdict.
+
 ## Réglages depuis le lobby (par partie)
 
-- **Extraits par catégorie** (2 à 5). La durée d'une manche est tirée au sort entre **30 et 45 s** à chaque extrait (les previews iTunes durent 30 s : si le chrono va au-delà, on continue de répondre après la fin de la musique).
+- **Mode de jeu** : 🎉 classique ou ⚔️ battle royale (voir ci-dessus).
+- **Extraits par catégorie** (2 à 5, forcé à 3 en battle royale). La durée d'une manche est tirée au sort entre **30 et 45 s** à chaque extrait (les previews iTunes durent 30 s : si le chrono va au-delà, on continue de répondre après la fin de la musique).
 - **Difficulté** : 😌 facile (les gros tubes), 🎚️ moyen (points ×1,25) ou 🔥 difficile (pépites méconnues, points ×1,5). iTunes ne publie pas les nombres d'écoutes mais classe ses résultats par popularité : le niveau détermine si les extraits sont piochés en haut, au milieu ou au fond de ce classement. Les reprises karaoké/tribute sont filtrées.
 - **Mode réponses** : essais illimités, ou **un seul essai** (points ×2).
 - **Mode playlist** : chacun sa catégorie, ou **thèmes imposés** par l'écran (séparés par des virgules).
@@ -55,7 +66,7 @@ Le film/la série n'est à deviner que si l'extrait vient d'une **bande original
 - Sons d'ambiance sur l'écran (désactivables via 🔊), podium animé avec confettis, historique de la playlist en fin de partie.
 - Les téléphones **se reconnectent tout seuls** (page rechargée, réseau qui saute) sans perdre leur score.
 
-Valeurs par défaut dans `CONFIG` (server.js) : `TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS_MIN`/`ROUND_SECONDS_MAX` (30–45), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min).
+Valeurs par défaut dans `CONFIG` (server.js) : `TRACKS_PER_CATEGORY` (3), `ROUND_SECONDS_MIN`/`ROUND_SECONDS_MAX` (30–45), `COUNTRY` (`FR`), barème de points, durée de vie des rooms (3 h), délai de reconnexion de l'hôte (2 min). La cadence des éliminations en battle royale est dans `BATTLE_EVERY` (3).
 
 ## Détails techniques
 

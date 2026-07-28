@@ -6,7 +6,8 @@
 
    Fonctionnalités : réglages par room (durée, nb d'extraits, modes),
    playlist par joueurs OU thèmes imposés par l'hôte, mode "un seul
-   essai", bonus de série, indice à mi-manche, "tu chauffes",
+   essai", mode battle royale (élimination du dernier au score toutes
+   les 3 chansons), bonus de série, indice à mi-manche, "tu chauffes",
    reconnexion des joueurs, litiges validés par l'hôte, historique.
 
    Express + Socket.io + API iTunes — Node >= 18
@@ -88,6 +89,7 @@ function makeCode() {
 function defaultOpts() {
   return {
     tracksPerCat: CONFIG.TRACKS_PER_CATEGORY,
+    gameMode: "classic",      // "classic" | "battle" (battle royale : le dernier au score est éliminé toutes les 3 chansons)
     answerMode: "libre",      // "libre" | "oneshot" (un seul essai, points ×2)
     difficulty: "facile",     // "facile" | "moyen" | "difficile" (durée d'écoute)
     playlistMode: "players",  // "players" (chacun sa catégorie) | "host" (thèmes imposés)
@@ -99,7 +101,7 @@ function createGame() {
   const game = {
     code: makeCode(),
     createdAt: Date.now(),
-    state: "LOBBY", // LOBBY -> CATEGORIES -> GENERATING -> PLAYING -> REVEAL -> PODIUM
+    state: "LOBBY", // LOBBY -> CATEGORIES -> GENERATING -> PLAYING -> REVEAL (-> ELIMINATION en battle) -> PODIUM
     hostId: null,
     remoteAudio: false, // true = les téléphones jouent aussi l'extrait
     opts: defaultOpts(),
@@ -146,7 +148,7 @@ setInterval(() => {
 function playersPublic(game) {
   return [...game.players.values()].map((p) => ({
     id: p.key, name: p.name, score: p.score, streak: p.streak,
-    categoryOk: !!p.categoryOk, connected: p.connected,
+    categoryOk: !!p.categoryOk, connected: p.connected, alive: p.alive !== false,
   }));
 }
 function broadcastLobby(game) {
@@ -162,6 +164,85 @@ function leaderboard(game) {
 function emitToPlayers(game, event, payload) {
   for (const p of game.players.values()) {
     if (p.sid) io.to(p.sid).emit(event, payload);
+  }
+}
+
+/* ---------- Battle royale ---------- */
+const BATTLE_EVERY = 3; // une élimination toutes les 3 chansons
+
+function alivePlayers(game) {
+  return [...game.players.values()].filter((p) => p.alive !== false);
+}
+
+/* Un checkpoint d'élimination tombe après chaque bloc de 3 extraits */
+function isBattleCheckpoint(game) {
+  if (game.opts.gameMode !== "battle") return false;
+  if (game.current < 0 || (game.current + 1) % BATTLE_EVERY !== 0) return false;
+  if (game.elimDoneAt === game.current) return false; // déjà traité (refresh hôte…)
+  return alivePlayers(game).length > 1;
+}
+
+/* Classement final : en battle, l'ordre d'élimination prime (le survivant
+   gagne, puis les éliminés du plus tardif au plus précoce, score en dernier
+   recours) ; en classique, le score seul décide. */
+function finalRanking(game) {
+  const arr = playersPublic(game);
+  if (game.opts.gameMode === "battle") {
+    arr.sort((a, b) => {
+      if (a.alive !== b.alive) return a.alive ? -1 : 1;
+      const ea = game.players.get(a.id)?.eliminatedAt ?? Infinity;
+      const eb = game.players.get(b.id)?.eliminatedAt ?? Infinity;
+      if (ea !== eb) return eb - ea;
+      return b.score - a.score;
+    });
+  } else {
+    arr.sort((a, b) => b.score - a.score);
+  }
+  return arr.map((p, i) => ({ rank: i + 1, ...p }));
+}
+
+/* Élimination : le dernier au score sort. Égalité parfaite entre tous les
+   derniers ET tous les survivants → personne ne sort cette fois. */
+function runElimination(game) {
+  game.state = "ELIMINATION";
+  game.elimDoneAt = game.current;
+
+  const alive = alivePlayers(game);
+  let eliminated = [];
+  if (alive.length > 1) {
+    const min = Math.min(...alive.map((p) => p.score));
+    const losers = alive.filter((p) => p.score === min);
+    if (losers.length < alive.length) {
+      for (const l of losers) {
+        l.alive = false;
+        l.eliminatedAt = game.current;
+      }
+      eliminated = losers;
+    }
+  }
+
+  const remaining = alivePlayers(game);
+  const isOver = remaining.length <= 1 || game.current >= game.tracks.length - 1;
+  if (remaining.length <= 1) game.forceEnd = true;
+
+  const payload = {
+    eliminated: eliminated.map((p) => ({ id: p.key, name: p.name, score: p.score })),
+    remaining: remaining
+      .map((p) => ({ id: p.key, name: p.name, score: p.score }))
+      .sort((a, b) => b.score - a.score),
+    nobody: eliminated.length === 0,
+    isOver,
+  };
+  game.lastElim = payload; // pour resynchroniser un hôte / joueur qui revient
+
+  io.to(game.hostId).emit("battle:elimination", payload);
+  for (const p of game.players.values()) {
+    if (!p.sid) continue;
+    io.to(p.sid).emit("battle:elimination", {
+      ...payload,
+      eliminatedYou: eliminated.some((e) => e.key === p.key),
+      aliveYou: p.alive !== false,
+    });
   }
 }
 
@@ -368,6 +449,7 @@ function pickTracks(results, n, category, difficulty) {
    DÉROULÉ D'UNE MANCHE
    ============================================================ */
 function startRound(game) {
+  if (game.forceEnd) return endGame(game); // battle : il ne reste qu'un survivant
   game.current++;
   if (game.current >= game.tracks.length) return endGame(game);
 
@@ -401,11 +483,21 @@ function startRound(game) {
     mode: game.opts.answerMode,
     difficulty: game.opts.difficulty,
     hasWork: !!track.work,
+    battle: game.opts.gameMode === "battle",
+    // battle : cet extrait est le dernier avant une élimination
+    elimAfter: game.opts.gameMode === "battle" && (game.current + 1) % BATTLE_EVERY === 0
+      && alivePlayers(game).length > 1,
   };
   // L'écran hôte de CETTE room joue le son
   io.to(game.hostId).emit("round:start", { ...base, previewUrl: track.previewUrl });
-  // Les téléphones aussi, si l'option "à distance" est activée
-  emitToPlayers(game, "round:start", game.remoteAudio ? { ...base, previewUrl: track.previewUrl } : base);
+  // Les téléphones aussi, si l'option "à distance" est activée ;
+  // les éliminés reçoivent la manche en spectateurs (réponses verrouillées)
+  for (const p of game.players.values()) {
+    if (!p.sid) continue;
+    const payload = game.remoteAudio ? { ...base, previewUrl: track.previewUrl } : { ...base };
+    if (base.battle) payload.eliminated = p.alive === false;
+    io.to(p.sid).emit("round:start", payload);
+  }
 }
 
 /* Indice de mi-manche (grand écran uniquement) : pochette floutée + initiales.
@@ -463,6 +555,7 @@ function endRound(game) {
     finders: buildFinders(game),
     leaderboard: leaderboard(game),
     isLast: game.current === game.tracks.length - 1,
+    checkpoint: isBattleCheckpoint(game), // battle : une élimination suit cette révélation
     refused,
   });
 }
@@ -475,7 +568,7 @@ function podiumTracks(game) {
 
 function endGame(game) {
   game.state = "PODIUM";
-  io.to(game.code).emit("game:podium", { leaderboard: leaderboard(game), tracks: podiumTracks(game) });
+  io.to(game.code).emit("game:podium", { leaderboard: finalRanking(game), tracks: podiumTracks(game) });
 }
 
 /* Playlist "chacun sa catégorie" */
@@ -522,11 +615,16 @@ function sendSnapshot(game, socket, p) {
       mode: game.opts.answerMode, difficulty: game.opts.difficulty, hasWork: !!track.work,
     };
     if (game.remoteAudio) payload.previewUrl = track.previewUrl;
+    if (game.opts.gameMode === "battle") {
+      payload.battle = true;
+      payload.eliminated = p.alive === false;
+    }
     socket.emit("round:start", payload);
     const f = game.round.found.get(p.key) || {};
     socket.emit("answer:state", {
       titleDone: !!f.title, artistDone: !!f.artist, workDone: !!f.work,
       locked: game.opts.answerMode === "oneshot" && game.round.attempts.has(p.key),
+      eliminated: game.opts.gameMode === "battle" && p.alive === false,
       score: p.score,
     });
   } else if (game.state === "REVEAL" && game.round) {
@@ -537,8 +635,14 @@ function sendSnapshot(game, socket, p) {
       finders: buildFinders(game), leaderboard: leaderboard(game),
       isLast: game.current === game.tracks.length - 1, refused: [],
     });
+  } else if (game.state === "ELIMINATION" && game.lastElim) {
+    socket.emit("battle:elimination", {
+      ...game.lastElim,
+      eliminatedYou: p.alive === false && p.eliminatedAt === game.current,
+      aliveYou: p.alive !== false,
+    });
   } else if (game.state === "PODIUM") {
-    socket.emit("game:podium", { leaderboard: leaderboard(game), tracks: podiumTracks(game) });
+    socket.emit("game:podium", { leaderboard: finalRanking(game), tracks: podiumTracks(game) });
   }
 }
 
@@ -589,8 +693,10 @@ io.on("connection", (socket) => {
     } else if (game.state === "REVEAL") {
       game.round.revealed = false; // ré-émettre la révélation à toute la room
       endRound(game);
+    } else if (game.state === "ELIMINATION" && game.lastElim) {
+      socket.emit("battle:elimination", game.lastElim);
     } else if (game.state === "PODIUM") {
-      socket.emit("game:podium", { leaderboard: leaderboard(game), tracks: podiumTracks(game) });
+      socket.emit("game:podium", { leaderboard: finalRanking(game), tracks: podiumTracks(game) });
     }
   });
 
@@ -606,6 +712,7 @@ io.on("connection", (socket) => {
     if (!game || socket.id !== game.hostId || game.state !== "LOBBY") return;
     const opts = game.opts;
     if ([2, 3, 4, 5].includes(+o.tracksPerCat)) opts.tracksPerCat = +o.tracksPerCat;
+    if (["classic", "battle"].includes(o.gameMode)) opts.gameMode = o.gameMode;
     if (["libre", "oneshot"].includes(o.answerMode)) opts.answerMode = o.answerMode;
     if (DIFFICULTIES[o.difficulty]) opts.difficulty = o.difficulty;
     if (["players", "host"].includes(o.playlistMode)) opts.playlistMode = o.playlistMode;
@@ -618,6 +725,9 @@ io.on("connection", (socket) => {
     const game = gameOf(socket);
     if (!game || socket.id !== game.hostId || game.state !== "LOBBY") return;
     if (game.players.size < CONFIG.MIN_PLAYERS) return;
+
+    // Battle royale : 3 chansons par thème, une élimination à chaque bloc
+    if (game.opts.gameMode === "battle") game.opts.tracksPerCat = BATTLE_EVERY;
 
     if (game.opts.playlistMode === "host") {
       if (!game.opts.themes.length) {
@@ -641,8 +751,13 @@ io.on("connection", (socket) => {
 
   socket.on("host:next", () => {
     const game = gameOf(socket);
-    if (!game || socket.id !== game.hostId || game.state !== "REVEAL") return;
-    startRound(game);
+    if (!game || socket.id !== game.hostId) return;
+    if (game.state === "REVEAL") {
+      // Battle : après les litiges, le verdict tombe toutes les 3 chansons
+      if (isBattleCheckpoint(game)) return runElimination(game);
+      return startRound(game);
+    }
+    if (game.state === "ELIMINATION") return startRound(game);
   });
 
   socket.on("host:skip", () => {
@@ -681,6 +796,9 @@ io.on("connection", (socket) => {
     game.tracks = [];
     game.current = -1;
     game.round = null;
+    game.forceEnd = false;
+    game.elimDoneAt = undefined;
+    game.lastElim = null;
     socket.emit("host:init", { code: game.code, lanUrl: LAN_URL, remoteAudio: game.remoteAudio, opts: game.opts, resume: false });
     io.to(game.code).emit("game:reset", { code: game.code });
     broadcastLobby(game);
@@ -727,6 +845,7 @@ io.on("connection", (socket) => {
     game.players.set(pkey, {
       key: pkey, sid: socket.id, name, score: 0, streak: 0,
       category: null, categoryOk: false, connected: true,
+      alive: true, eliminatedAt: null,
     });
     ack && ack({ ok: true, name, code: game.code, key: pkey });
     broadcastLobby(game);
@@ -766,6 +885,7 @@ io.on("connection", (socket) => {
     const game = gameOf(socket);
     const p = game && game.players.get(socket.data.key);
     if (!p || game.state !== "PLAYING" || !game.round || game.round.revealed) return;
+    if (game.opts.gameMode === "battle" && p.alive === false) return; // spectateur
     text = String(text || "").trim();
     if (!text) return;
 
@@ -831,7 +951,8 @@ io.on("connection", (socket) => {
       score: p.score,
     });
 
-    const connected = [...game.players.values()].filter((x) => x.connected);
+    // Les éliminés (spectateurs) ne bloquent pas la fin anticipée de la manche
+    const connected = [...game.players.values()].filter((x) => x.connected && x.alive !== false);
     const everyoneDone = connected.length > 0 && connected.every((x) => {
       if (oneshot) return round.attempts.has(x.key);
       const f = round.found.get(x.key);
